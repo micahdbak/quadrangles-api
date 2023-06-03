@@ -1,9 +1,11 @@
 package blitz
 
 import (
-	"net/http"
-	"fmt"
+	"sync"
 	"strconv"
+	"fmt"
+	"net/http"
+	"database/sql"
 	"github.com/gorilla/websocket"
 )
 
@@ -12,19 +14,12 @@ type Comment struct {
 	Text string
 }
 
-type Post struct {
-	Text string
-}
-
 type WebSocketHandler struct {
 	Channels map[int]*Channel
 	Comments chan Comment
+	Mutex sync.Mutex
 	Store []Comment
-}
-
-type PostHandler struct {
-	Posts chan Post
-	Store []Post
+	DB *sql.DB
 }
 
 var upgrader = websocket.Upgrader{
@@ -35,17 +30,12 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func (ws *WebSocketHandler) Init() {
+func (ws *WebSocketHandler) Init(db *sql.DB) {
 	ws.Channels = make(map[int]*Channel, 0)
 	ws.Comments = make(chan Comment)
+	ws.DB = db
 
 	fmt.Print("Initialized WebSocketHandler\n")
-}
-
-func (p *PostHandler) Init() {
-	p.Posts = make(chan Post)
-
-	fmt.Print("Initialized PostHandler\n")
 }
 
 func (ws *WebSocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -64,8 +54,6 @@ func (ws *WebSocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Print("Got connection!\n")
-
 	c, ok := ws.Channels[PID]
 
 	if !ok {
@@ -77,9 +65,19 @@ func (ws *WebSocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.Add(conn)
 	defer c.Remove(conn)
 
+	fmt.Printf("Opened socket on PID: %d\n", PID)
+
+	comments := ws.Match(PID)
+
+	// send all previous comments to connection
+	for _, comment := range comments {
+		conn.WriteMessage(websocket.TextMessage, []byte(comment))
+	}
+
 	for {
 		t, m, err := conn.ReadMessage()
 		if err != nil || t == websocket.CloseMessage {
+			fmt.Printf("Closed socket on PID: %d\n", PID)
 			break
 		}
 
@@ -92,8 +90,28 @@ func (ws *WebSocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (p *PostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Access to PostHandler from %q", r.RemoteAddr)
+func (ws *WebSocketHandler) Append(comment Comment) {
+	ws.Mutex.Lock()
+	defer ws.Mutex.Unlock()
+
+	ws.Store = append(ws.Store, comment)
+}
+
+func (ws *WebSocketHandler) Match(PID int) []string {
+	ws.Mutex.Lock()
+	defer ws.Mutex.Unlock()
+
+	comments := make([]string, 0)
+
+	// find all comments that match this PID
+	// NOTE: SLOW! this will be replaced with a database command
+	for _, comment := range ws.Store {
+		if comment.PID == PID {
+			comments = append(comments, comment.Text)
+		}
+	}
+
+	return comments
 }
 
 func (ws *WebSocketHandler) Factory() {
@@ -105,23 +123,16 @@ func (ws *WebSocketHandler) Factory() {
 			break
 		}
 
-		ws.Channels[comment.PID].Message(comment.Text)
-
-		// add comment to store
-		//ws.Store = append(ws.Store, *comment)
-	}
-}
-
-func (p *PostHandler) Factory() {
-	for {
-		post := <-p.Posts
-
-		// break loop upon nil item
-		if post.Text == "" {
-			break
+		c, ok := ws.Channels[comment.PID]
+		if !ok {
+			continue
 		}
 
-		// add post to posts
-		p.Store = append(p.Store, post)
+		c.Message(comment.Text)
+
+		// temporary: add comment to store
+		ws.Append(comment)
+
+		// TODO: insert comment into database
 	}
 }
