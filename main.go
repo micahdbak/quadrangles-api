@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"log"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 func main() {
 	var (
+		f blitz.FileHandler
 		ws blitz.WebSocketHandler
 		p blitz.PostHandler
 	)
@@ -21,12 +23,14 @@ func main() {
 		return
 	}
 
+	f.Init(os.Getenv("GOBLITZF"))
 	ws.Init(db)
 	p.Init(db)
 
 	go ws.Factory()
 	go p.Factory()
 
+	http.HandleFunc("/api/f/", f.GetFile)
 	http.Handle("/api/ws/", &ws)
 	http.Handle("/api/p/", &p)
 	http.HandleFunc("/api/t/", p.GetPosts)
