@@ -16,6 +16,9 @@ func main() {
 	ws.Init()
 	p.Init()
 
+	go ws.Factory()
+	go p.Factory()
+
 	http.Handle("/api/ws/", &ws)
 	http.Handle("/api/p/", &p)
 

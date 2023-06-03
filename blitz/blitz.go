@@ -1,86 +1,127 @@
 package blitz
 
 import (
-	//"sync"
 	"net/http"
 	"fmt"
-	//"golang.org/x/net/html"
-	//"github.com/gorilla/websocket"
+	"strconv"
+	"github.com/gorilla/websocket"
 )
 
-/*
 type Comment struct {
-	PID int64
-	Created int64
+	PID int
 	Text string
 }
 
 type Post struct {
-	Created int64
 	Text string
 }
 
-type Channel struct {
-	mutex sync.Mutex
-	conn []*websocket.Conn
+type WebSocketHandler struct {
+	Channels map[int]*Channel
+	Comments chan Comment
+	Store []Comment
+}
+
+type PostHandler struct {
+	Posts chan Post
+	Store []Post
 }
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-}
-*/
-
-type WebSocketHandler struct {
-	//Comments chan *Comment
-}
-
-type PostHandler struct {
-	//Posts chan *Post
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
 }
 
 func (ws *WebSocketHandler) Init() {
-	fmt.Print("Initialized ws\n")
+	ws.Channels = make(map[int]*Channel, 0)
+	ws.Comments = make(chan Comment)
+
+	fmt.Print("Initialized WebSocketHandler\n")
 }
 
 func (p *PostHandler) Init() {
-	fmt.Print("Initialized p\n")
+	p.Posts = make(chan Post)
+
+	fmt.Print("Initialized PostHandler\n")
 }
 
 func (ws *WebSocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Access to WebSocketHandler from %q", r.RemoteAddr)
+	PID, err := strconv.Atoi(r.URL.Path[8:])
+	if err != nil || PID < 0 {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	// check if post at PID exists
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		// bad request message is already sent by Upgrade
+		fmt.Printf("%v\n", err)
+		return
+	}
+
+	fmt.Print("Got connection!\n")
+
+	c, ok := ws.Channels[PID]
+
+	if !ok {
+		c = new(Channel)
+		ws.Channels[PID] = c
+	}
+
+	// add this connection to the channel
+	c.Add(conn)
+	defer c.Remove(conn)
+
+	for {
+		t, m, err := conn.ReadMessage()
+		if err != nil || t == websocket.CloseMessage {
+			break
+		}
+
+		var comment Comment
+
+		comment.PID = PID
+		comment.Text = string(m)
+
+		ws.Comments <- comment
+	}
 }
 
 func (p *PostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Access to PostHandler from %q", r.RemoteAddr)
 }
 
-/*
-func CommentFactory(comments []*Comment, c chan *Comment) {
+func (ws *WebSocketHandler) Factory() {
 	for {
-		comment := <-c
+		comment := <-ws.Comments
 
 		// break loop upon nil item
-		if comment == nil {
+		if comment.Text == "" {
 			break
 		}
 
-		// add comment to comments
-		comments = append(comments, comment)
+		ws.Channels[comment.PID].Message(comment.Text)
+
+		// add comment to store
+		//ws.Store = append(ws.Store, *comment)
 	}
 }
 
-func PostFactory(posts []*Post, c chan *Post) {
+func (p *PostHandler) Factory() {
 	for {
-		post := <-c
+		post := <-p.Posts
 
 		// break loop upon nil item
-		if post == nil {
+		if post.Text == "" {
 			break
 		}
 
 		// add post to posts
-		posts = append(posts, post)
+		p.Store = append(p.Store, post)
 	}
 }
-*/
