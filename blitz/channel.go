@@ -1,8 +1,8 @@
 package blitz
 
 import (
-	"sync"
 	"github.com/gorilla/websocket"
+	"sync"
 )
 
 type Channel struct {
@@ -24,9 +24,9 @@ func (c *Channel) Remove(target *websocket.Conn) {
 	for i, conn := range c.Conns {
 		if conn == target {
 			// swap this connection with the end of the list
-			c.Conns[i] = c.Conns[len(c.Conns) - 1]
+			c.Conns[i] = c.Conns[len(c.Conns)-1]
 			// remove last element in this array
-			c.Conns = c.Conns[:len(c.Conns) - 1]
+			c.Conns = c.Conns[:len(c.Conns)-1]
 
 			break
 		}

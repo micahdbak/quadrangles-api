@@ -1,34 +1,35 @@
 package blitz
 
 import (
-	"os"
-	"io"
-	"fmt"
-	"time"
-	"strconv"
-	"net/http"
 	"database/sql"
+	"fmt"
+	"io"
 	"mime/multipart"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
 )
 
 type File struct {
-	FormFile multipart.File
-	Header   *multipart.FileHeader
+	FID   int            // fid of this file in the database
+	Ctype string         // content type of file
+	File  multipart.File // reader that will be used to write file to disk
 }
 
 type FileHandler struct {
-	Root string
-	MaxFileSize int64
-	QueueSize int
-	DB *sql.DB
-	Files chan File
+	Root        string    // directory to read and write files
+	MaxFileSize int64     // maximum permitted file size
+	QueueSize   int       // maximum number of files to store in queue
+	DB          *sql.DB   // database to store file information
+	Files       chan File // file queue
 }
 
 func (f *FileHandler) Init(root string, maxFileSize int64, queueSize int, db *sql.DB) {
 	f.Root = root
 
 	// ensure that root is a directory
-	if f.Root[len(f.Root) - 1] != '/' {
+	if f.Root[len(f.Root)-1] != '/' {
 		f.Root = f.Root + "/"
 	}
 
@@ -44,11 +45,21 @@ func (f *FileHandler) Init(root string, maxFileSize int64, queueSize int, db *sq
 func (f *FileHandler) ServeFile(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path[7:] // get file name component of path
 
+	// get numerical component (fid) of path
 	i := 0
-	for path[i] != '.' {
+	for i < len(path) && path[i] != '.' {
 		i++
 	}
 
+	// if i is the length of the path, then there is no file extension
+	if i == len(path) {
+		http.Error(w,
+			http.StatusText(http.StatusBadRequest),
+			http.StatusBadRequest)
+		return
+	}
+
+	// attempt to read fid
 	fid, err := strconv.Atoi(path[:i])
 	if err != nil {
 		http.Error(w,
@@ -57,8 +68,9 @@ func (f *FileHandler) ServeFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// get provided file extension; check with database entry
 	reqCtype := path[i+1:]
-	rows, err := f.DB.Query("SELECT ctype, name FROM files WHERE fid = $1", fid)
+	rows, err := f.DB.Query("SELECT ctype, name, time FROM files WHERE fid = $1", fid)
 	if err != nil {
 		http.Error(w,
 			http.StatusText(http.StatusNotFound),
@@ -67,9 +79,10 @@ func (f *FileHandler) ServeFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var ctype, name string
+	var unix int64
 
 	rows.Next()
-	rows.Scan(&ctype, &name)
+	rows.Scan(&ctype, &name, &unix)
 	rows.Close()
 
 	if ctype != reqCtype {
@@ -79,6 +92,7 @@ func (f *FileHandler) ServeFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// attempt to open file
 	file, err := os.Open(f.Root + path)
 	if err != nil {
 		http.Error(w,
@@ -89,8 +103,8 @@ func (f *FileHandler) ServeFile(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	// set content type
-	w.Header().Set("Content-Type", "image/" + ctype)
-	http.ServeContent(w, r, name, time.Now(), file)
+	w.Header().Set("Content-Type", "image/"+ctype)
+	http.ServeContent(w, r, name, time.Unix(unix, 0), file)
 }
 
 func (f *FileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +116,7 @@ func (f *FileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// get file posted
+	// parse multipart form
 	r.ParseMultipartForm(f.MaxFileSize)
 	formFile, header, err := r.FormFile("file")
 	if err != nil {
@@ -113,9 +127,22 @@ func (f *FileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctype := header.Header["Content-Type"][0]
+	var ctype string
 
-	// ensure content type is an image
+	/* read content type; this will be in the form
+	 * "image/<png/jpeg/...>" if it is an image */
+	if ctype_s, ok := header.Header["Content-Type"]; !ok || len(ctype_s) == 0 {
+		http.Error(w,
+			http.StatusText(http.StatusBadRequest),
+			http.StatusBadRequest)
+		return
+	} else {
+		ctype = ctype_s[0]
+	}
+
+	/* ensure content type is an image;
+	 * len(ctype) will be >6 if ctype starts with "image/";
+	 * len[:5] will equal "image" if content is an image. */
 	if len(ctype) < 6 || ctype[:5] != "image" {
 		http.Error(w,
 			http.StatusText(http.StatusBadRequest),
@@ -141,55 +168,59 @@ func (f *FileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// prepare file for factory
+	// insert this file into the database
+	rows, err := f.DB.Query(
+		`INSERT INTO files (ctype, name, time)
+			VALUES ($1, $2, $3)
+			RETURNING fid`,
+		ctype[6:], header.Filename, time.Now().Unix(),
+	)
+	if err != nil || !rows.Next() {
+		fmt.Printf("FileHandler.ServeHTTP: %v\n", err)
+		http.Error(w,
+			http.StatusText(http.StatusInternalServerError),
+			http.StatusInternalServerError)
+		return
+	}
 
-	var file File
+	var (
+		fid  int
+		file File
+	)
 
-	file.FormFile = formFile
-	file.Header = header
+	rows.Scan(&fid)
+	rows.Close()
 
-	// enqueue this file
+	file.FID = fid
+	file.Ctype = ctype[6:]
+	file.File = formFile
+
 	f.Files <- file
+
+	w.Write([]byte(strconv.Itoa(fid)))
 }
 
 func (f *FileHandler) Factory() {
 	for {
 		file := <-f.Files
-		ctype := file.Header.Header["Content-Type"][0]
-
-		// insert this file into the database
-		rows, err := f.DB.Query(
-			"INSERT INTO files (ctype, name) VALUES ($1, $2) RETURNING fid",
-			ctype[6:], file.Header.Filename)
-		if err != nil {
-			fmt.Printf("FileHandler.Factory: %v\n", err)
-			file.FormFile.Close()
-			continue
-		}
-
-		var fid int
-
-		rows.Next()
-		rows.Scan(&fid) // get fid of inserted file
-		rows.Close()
 
 		// open destination file
-		dest, err := os.Create(f.Root + strconv.Itoa(fid) + "." + ctype[6:])
+		dest, err := os.Create(f.Root + strconv.Itoa(file.FID) + "." + file.Ctype)
 		if err != nil {
 			fmt.Printf("FileHandler.Factory: %v\n", err)
-			file.FormFile.Close()
+			file.File.Close()
 			continue
 		}
 
 		// copy form file to destination file
-		if _, err := io.Copy(dest, file.FormFile); err != nil {
+		if _, err := io.Copy(dest, file.File); err != nil {
 			fmt.Printf("FileHandler.Factory: %v\n", err)
+		} else {
+			fmt.Printf("FileHandler.Factory: Inserted fid %d ctype %s\n", file.FID, file.Ctype)
 		}
 
-		fmt.Printf("FileHandler.Factory: Inserted fid %d ctype %s\n", fid, ctype)
-
 		// close files
-		file.FormFile.Close()
+		file.File.Close()
 		dest.Close()
 	}
 }

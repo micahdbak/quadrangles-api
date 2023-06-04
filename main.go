@@ -1,20 +1,20 @@
 package main
 
 import (
-	"os"
-	"log"
-	"fmt"
-	"net/http"
-	"goblitz/blitz"
 	"database/sql"
+	"fmt"
 	_ "github.com/lib/pq"
+	"goblitz/blitz"
+	"log"
+	"net/http"
+	"os"
 )
 
 func main() {
 	var (
-		f blitz.FileHandler
+		f  blitz.FileHandler
 		ws blitz.WebSocketHandler
-		p blitz.PostHandler
+		p  blitz.PostHandler
 	)
 
 	db, err := sql.Open("postgres", "dbname=goblitz sslmode=disable")
@@ -23,19 +23,28 @@ func main() {
 		return
 	}
 
-	f.Init(os.Getenv("GOBLITZF"), 2 << 20, 10, db)
+	root, ok := os.LookupEnv("GOBLITZF")
+	if !ok {
+		fmt.Print("The GOBLITZF environment variable must be set to determine where files are stored.\n")
+		return
+	}
+
+	f.Init(root, 2<<20, 10, db)
 	ws.Init(db)
-	p.Init(db)
+	p.Init("/api/f/", db)
 
 	go f.Factory()
 	go ws.Factory()
-	go p.Factory()
 
 	http.HandleFunc("/api/f/", f.ServeFile)
+	http.HandleFunc("/api/p/", p.ServePost)
+	http.HandleFunc("/api/t/", p.ServePosts)
+
 	http.Handle("/api/file", &f)
 	http.Handle("/api/ws/", &ws)
-	http.Handle("/api/p/", &p)
-	http.HandleFunc("/api/t/", p.ServePosts)
+	http.Handle("/api/post", &p)
+
+	http.Handle("/", http.FileServer(http.Dir("./dev/")))
 
 	log.Fatal(http.ListenAndServe(":8000", nil))
 }

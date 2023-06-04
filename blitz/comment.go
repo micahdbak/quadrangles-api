@@ -1,16 +1,16 @@
 package blitz
 
 import (
-	"sync"
-	"strconv"
-	"fmt"
-	"net/http"
 	"database/sql"
+	"fmt"
 	"github.com/gorilla/websocket"
+	"net/http"
+	"strconv"
+	"sync"
 )
 
 type Comment struct {
-	PID int
+	PID  int
 	Text string
 	kill bool
 }
@@ -18,9 +18,9 @@ type Comment struct {
 type WebSocketHandler struct {
 	Channels map[int]*Channel
 	Comments chan Comment
-	Mutex sync.Mutex
-	Store []Comment
-	DB *sql.DB
+	Mutex    sync.Mutex
+	Store    []Comment
+	DB       *sql.DB
 }
 
 var upgrader = websocket.Upgrader{
