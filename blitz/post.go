@@ -8,8 +8,9 @@ import (
 )
 
 type Post struct {
-	PID  int    `json:"pid"`
-	Text string `json:"text"`
+	PID  int     `json:"pid"`
+	Text string  `json:"text"`
+	kill bool
 }
 
 type PostHandler struct {
@@ -30,7 +31,9 @@ func (p *PostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, c := range PID {
 		if c < '0' || c > '9' {
 			// invalid PID
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			http.Error(w,
+				http.StatusText(http.StatusBadRequest),
+				http.StatusBadRequest)
 			return
 		}
 	}
@@ -41,7 +44,9 @@ func (p *PostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil || !rows.Next() {
-		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		http.Error(w,
+			http.StatusText(http.StatusNotFound),
+			http.StatusNotFound)
 	}
 
 	var post Post
@@ -49,18 +54,22 @@ func (p *PostHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	encoded, err := json.Marshal(post)
 	if err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		http.Error(w,
+			http.StatusText(http.StatusInternalServerError),
+			http.StatusInternalServerError)
 		return
 	}
 
 	w.Write(encoded)
 }
 
-func (p *PostHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
+func (p *PostHandler) ServePosts(w http.ResponseWriter, r *http.Request) {
 	topic := r.URL.Path[7:]
 
 	if len(topic) > 4 {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		http.Error(w,
+			http.StatusText(http.StatusBadRequest),
+			http.StatusBadRequest)
 		return
 	}
 
@@ -68,7 +77,9 @@ func (p *PostHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 		// check if topic name isn't alphanumeric
 		if (c < 'a' || c > 'z') && (c < '0' || c > '9') {
 			// invalid topic
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			http.Error(w,
+				http.StatusText(http.StatusBadRequest),
+				http.StatusBadRequest)
 			return
 		}
 	}
@@ -112,11 +123,11 @@ func (p *PostHandler) Factory() {
 	for {
 		post := <-p.Posts
 
-		// break loop upon nil item
-		if post.Text == "" {
+		// break loop upon kill item
+		if post.kill {
 			break
 		}
 
-		// TODO: insert post into database
+
 	}
 }

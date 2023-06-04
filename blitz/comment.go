@@ -12,6 +12,7 @@ import (
 type Comment struct {
 	PID int
 	Text string
+	kill bool
 }
 
 type WebSocketHandler struct {
@@ -41,7 +42,9 @@ func (ws *WebSocketHandler) Init(db *sql.DB) {
 func (ws *WebSocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	PID, err := strconv.Atoi(r.URL.Path[8:])
 	if err != nil || PID < 0 {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		http.Error(w,
+			http.StatusText(http.StatusBadRequest),
+			http.StatusBadRequest)
 		return
 	}
 
@@ -118,8 +121,8 @@ func (ws *WebSocketHandler) Factory() {
 	for {
 		comment := <-ws.Comments
 
-		// break loop upon nil item
-		if comment.Text == "" {
+		// break loop upon kill item
+		if comment.kill {
 			break
 		}
 

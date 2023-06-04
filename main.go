@@ -23,17 +23,19 @@ func main() {
 		return
 	}
 
-	f.Init(os.Getenv("GOBLITZF"))
+	f.Init(os.Getenv("GOBLITZF"), 2 << 20, 10, db)
 	ws.Init(db)
 	p.Init(db)
 
+	go f.Factory()
 	go ws.Factory()
 	go p.Factory()
 
-	http.HandleFunc("/api/f/", f.GetFile)
+	http.HandleFunc("/api/f/", f.ServeFile)
+	http.Handle("/api/file", &f)
 	http.Handle("/api/ws/", &ws)
 	http.Handle("/api/p/", &p)
-	http.HandleFunc("/api/t/", p.GetPosts)
+	http.HandleFunc("/api/t/", p.ServePosts)
 
 	log.Fatal(http.ListenAndServe(":8000", nil))
 }
