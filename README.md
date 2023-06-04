@@ -20,6 +20,7 @@ CREATE TABLE posts (
 );
 
 CREATE TABLE comments (
+    cid  serial primary key,
     pid  serial references posts(pid),
     text varchar(2000),
     time bigint

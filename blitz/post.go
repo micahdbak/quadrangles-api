@@ -115,13 +115,14 @@ func (p *PostHandler) ServePosts(w http.ResponseWriter, r *http.Request) {
 
 	// read posts related to this topic, with their file information
 	rows, err := p.DB.Query(
-		`SELECT posts.pid, files.fid, files.ctype, posts.topic, posts.text, posts.unix
+		`SELECT posts.pid, files.fid, files.ctype, posts.topic, posts.text, posts.time
 			FROM posts JOIN files ON posts.fid = files.fid
 			WHERE posts.topic = $1`,
 		topic,
 	)
 
 	if err != nil || !rows.Next() {
+		fmt.Printf("PostHandler.ServePosts: %v\n", err)
 		w.Write([]byte("[]")) // write an empty array; no posts
 		return
 	}
@@ -144,7 +145,7 @@ func (p *PostHandler) ServePosts(w http.ResponseWriter, r *http.Request) {
 		rows.Scan(&pid, &fid, &ctype, &topic, &text, &unix)
 
 		post.PID = pid
-		post.File = strconv.Itoa(fid) + "." + ctype
+		post.File = p.Files + strconv.Itoa(fid) + "." + ctype
 		post.Topic = topic
 		post.Text = text
 		post.Unix = unix

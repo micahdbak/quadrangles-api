@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
@@ -29,7 +30,12 @@ func main() {
 		return
 	}
 
-	f.Init(root, 2<<20, 10, db)
+	/* root:        upload files into $GOBLITZF,
+	 * 2<<20:       maximum file size of 2MB,
+	 * 10:          maximum of 10 files in queue at a time
+	 * time.Second: maximum of one file written per second
+	 * db:          PostgreSQL to store file information */
+	f.Init(root, 2<<20, 10, time.Second, db)
 	ws.Init(db)
 	p.Init("/api/f/", db)
 
@@ -44,7 +50,9 @@ func main() {
 	http.Handle("/api/ws/", &ws)
 	http.Handle("/api/post", &p)
 
-	http.Handle("/", http.FileServer(http.Dir("./dev/")))
+	/* IMPORTANT: This is for testing only.
+	 * Comment this line out for production. */
+	http.Handle("/", http.FileServer(http.Dir("./test/")))
 
 	log.Fatal(http.ListenAndServe(":8000", nil))
 }

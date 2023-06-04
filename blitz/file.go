@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -18,14 +19,17 @@ type File struct {
 }
 
 type FileHandler struct {
-	Root        string    // directory to read and write files
-	MaxFileSize int64     // maximum permitted file size
-	QueueSize   int       // maximum number of files to store in queue
-	DB          *sql.DB   // database to store file information
-	Files       chan File // file queue
+	Root        string        // directory to read and write files
+	MaxFileSize int64         // maximum permitted file size
+	QueueSize   int           // maximum number of files to store in queue
+	Speed       time.Duration // minimum period of time between files in the queue
+	Last        time.Time     // time of last file written
+	Mutex       sync.Mutex    // used to ensure a file's place in the queue
+	Files       chan File     // file queue
+	DB          *sql.DB       // database to store file information
 }
 
-func (f *FileHandler) Init(root string, maxFileSize int64, queueSize int, db *sql.DB) {
+func (f *FileHandler) Init(root string, maxFileSize int64, queueSize int, speed time.Duration, db *sql.DB) {
 	f.Root = root
 
 	// ensure that root is a directory
@@ -35,6 +39,8 @@ func (f *FileHandler) Init(root string, maxFileSize int64, queueSize int, db *sq
 
 	f.MaxFileSize = maxFileSize
 	f.QueueSize = queueSize
+	f.Speed = speed
+	f.Last = time.Now()
 	f.DB = db
 
 	f.Files = make(chan File, queueSize)
@@ -42,6 +48,7 @@ func (f *FileHandler) Init(root string, maxFileSize int64, queueSize int, db *sq
 	fmt.Printf("Initialized FileHandler;\n\tserving files in %q\n", root)
 }
 
+// /api/f/<fid>.<ctype>
 func (f *FileHandler) ServeFile(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path[7:] // get file name component of path
 
@@ -135,6 +142,7 @@ func (f *FileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w,
 			http.StatusText(http.StatusBadRequest),
 			http.StatusBadRequest)
+		formFile.Close()
 		return
 	} else {
 		ctype = ctype_s[0]
@@ -147,6 +155,7 @@ func (f *FileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w,
 			http.StatusText(http.StatusBadRequest),
 			http.StatusBadRequest)
+		formFile.Close()
 		return
 	}
 
@@ -158,6 +167,10 @@ func (f *FileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		formFile.Close()
 		return
 	}
+
+	// ensure that no other files can take this file's place in the queue
+	f.Mutex.Lock()
+	defer f.Mutex.Unlock()
 
 	// check if queue is full
 	if len(f.Files) >= f.QueueSize {
@@ -202,6 +215,16 @@ func (f *FileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (f *FileHandler) Factory() {
 	for {
+		now := time.Now()
+		elapsed := now.Sub(f.Last)
+
+		if elapsed < f.Speed {
+			/* wait the remaining period of time
+			 * before moving onto the next file */
+			time.Sleep(f.Speed - elapsed)
+		}
+
+		f.Last = time.Now()
 		file := <-f.Files
 
 		// open destination file
