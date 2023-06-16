@@ -1,7 +1,7 @@
-# goblitz: Go API
+# API for quadrangles
 
 This API is dependant on the existence of a PostgreSQL server accessible on the `localhost`.
-A `goblitz` database must be present, and the following tables must be created:
+A `quadrangles` database must be present, and the following tables must be created:
 
 ```sql
 CREATE TABLE files (

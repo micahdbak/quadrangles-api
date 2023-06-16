@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	_ "github.com/lib/pq"
-	"goblitz/blitz"
+	qr "api/quadrangles"
 	"log"
 	"net/http"
 	"os"
@@ -13,24 +13,24 @@ import (
 
 func main() {
 	var (
-		f  blitz.FileHandler
-		ws blitz.WebSocketHandler
-		p  blitz.PostHandler
+		f  qr.FileHandler
+		ws qr.WebSocketHandler
+		p  qr.PostHandler
 	)
 
-	db, err := sql.Open("postgres", "dbname=goblitz sslmode=disable")
+	db, err := sql.Open("postgres", "dbname=quadrangles sslmode=disable")
 	if err != nil {
 		fmt.Printf("%v\nCouldn't connect to database.\n", err)
 		return
 	}
 
-	root, ok := os.LookupEnv("GOBLITZF")
+	root, ok := os.LookupEnv("QUADRANGLESFILES")
 	if !ok {
-		fmt.Print("The GOBLITZF environment variable must be set to determine where files are stored.\n")
+		fmt.Print("The $QUADRANGLESFILES environment variable must be set to determine where files are stored.\n")
 		return
 	}
 
-	/* root:        upload files into $GOBLITZF,
+	/* root:        upload files into $QUADRANGLESFILES,
 	 * 2<<20:       maximum file size of 2MB,
 	 * 10:          maximum of 10 files in queue at a time
 	 * time.Second: maximum of one file written per second

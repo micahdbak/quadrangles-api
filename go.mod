@@ -1,4 +1,4 @@
-module goblitz
+module api
 
 go 1.19
 

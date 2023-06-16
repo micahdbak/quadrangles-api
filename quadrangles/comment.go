@@ -1,4 +1,4 @@
-package blitz
+package quadrangles
 
 import (
 	"database/sql"
