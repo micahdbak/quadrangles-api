@@ -24,9 +24,9 @@ func main() {
 		return
 	}
 
-	root, ok := os.LookupEnv("QUADRANGLESFILES")
+	root, ok := os.LookupEnv("QRFILES")
 	if !ok {
-		fmt.Print("The $QUADRANGLESFILES environment variable must be set to determine where files are stored.\n")
+		fmt.Print("The $QRFILES environment variable must be set to determine where files are stored.\n")
 		return
 	}
 
@@ -42,7 +42,8 @@ func main() {
 	go f.Factory()
 	go ws.Factory()
 
-	http.HandleFunc("/api/f/", f.ServeFile)
+	// Files should be served through nginx, not go
+	//http.HandleFunc("/api/f/", f.ServeFile)
 	http.HandleFunc("/api/p/", p.ServePost)
 	http.HandleFunc("/api/t/", p.ServePosts)
 
