@@ -19,12 +19,10 @@ type Post struct {
 }
 
 type PostHandler struct {
-	Files string
-	DB    *sql.DB
+	DB *sql.DB
 }
 
-func (p *PostHandler) Init(files string, db *sql.DB) {
-	p.Files = files
+func (p *PostHandler) Init(db *sql.DB) {
 	p.DB = db
 
 	fmt.Print("Initialized PostHandler\n")
@@ -79,7 +77,7 @@ func (p *PostHandler) ServePost(w http.ResponseWriter, r *http.Request) {
 	rows.Close()
 
 	post.PID = PID
-	post.File = p.Files + strconv.Itoa(fid) + "." + ctype
+	post.File = strconv.Itoa(fid) + "." + ctype
 	post.Topic = topic
 	post.Text = text
 	post.Unix = unix
@@ -145,7 +143,7 @@ func (p *PostHandler) ServePosts(w http.ResponseWriter, r *http.Request) {
 		rows.Scan(&pid, &fid, &ctype, &topic, &text, &unix)
 
 		post.PID = pid
-		post.File = p.Files + strconv.Itoa(fid) + "." + ctype
+		post.File = strconv.Itoa(fid) + "." + ctype
 		post.Topic = topic
 		post.Text = text
 		post.Unix = unix

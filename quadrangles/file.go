@@ -49,7 +49,6 @@ func (f *FileHandler) Init(root string, maxFileSize int64, queueSize int, speed 
 }
 
 // /api/f/<fid>.<ctype>
-/*
 func (f *FileHandler) ServeFile(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path[7:] // get file name component of path
 
@@ -114,7 +113,6 @@ func (f *FileHandler) ServeFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/"+ctype)
 	http.ServeContent(w, r, name, time.Unix(unix, 0), file)
 }
-*/
 
 func (f *FileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// ensure that client is posting

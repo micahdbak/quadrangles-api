@@ -37,7 +37,7 @@ func main() {
 	 * db:          PostgreSQL to store file information */
 	f.Init(root, 2<<20, 10, time.Second, db)
 	ws.Init(db)
-	p.Init("/api/f/", db)
+	p.Init(db)
 
 	go f.Factory()
 	go ws.Factory()
@@ -46,6 +46,7 @@ func main() {
 	//http.HandleFunc("/api/f/", f.ServeFile)
 	http.HandleFunc("/api/p/", p.ServePost)
 	http.HandleFunc("/api/t/", p.ServePosts)
+	http.HandleFunc("/api/f/", f.ServeFile)
 
 	http.Handle("/api/file", &f)
 	http.Handle("/api/ws/", &ws)
